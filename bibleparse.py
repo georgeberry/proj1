@@ -1,3 +1,9 @@
+'''
+@by George Berry
+@geb97@cornell.edu
+@created 2/8/2014
+'''
+
 import re, time
 from functools import wraps
 
