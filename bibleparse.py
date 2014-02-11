@@ -12,42 +12,70 @@ with open(biblefile, 'rb') as f:
 #lowercase-ize
 
 def clean_up(bible):
+    #remove xml tags
     bible = re.sub(r'<.*>','',bible)
+    #replace verse numbers (beginning of sentence) with <s> tag
     bible = re.sub(r'[0-9]+:[0-9]+\s*','', bible)
-    bible = re.sub(r'\n+',' ', bible)
+    #replace newlines with spaces (we do a space split below)
+    bible = re.sub(r'[\n]+',' ', bible)
+    #replace punctuation with a space then that punctuation
+    bible = re.sub(r"[^\w\s\']+", " \g<0>", bible)
+    bible = re.sub(r'\.', '. </s> <s>', bible)
     bible = bible.lower().strip()
+    bible = re.split(r' +', bible)
+    bible.append('</s>') #just need this, we have a function that automatically will put <s> at the start
+    print bible[0:50]
+    print bible[-1]
+
     return bible
 
-def make_unigrams(b):
-    b = re.split(r' +', b)
 
-    d = {}
+def word_or_start_token(text_list, token_num):
+    if token_num < 0:
+        return '<s>'
+    else:
+        return text_list[token_num]
 
-    for word in b:
-        try:
-            d[word] += 1
-        except:
-            d[word] = 1
-    return d
+##make ngrams
+def make_ngrams(text_list, n):
+    n_gram_dict = {}
+    range_n = range((n-1), -1, -1)
 
-def make_bigrams(b):
-    bgd = {}
+    #initialize with repeated <s> at the beginning
+    for token_num in range(len(text_list)):
+        n_gram = []
+        for countdown in range_n:
+            try:
+                n_gram.append(text_list[token_num-countdown])
+            except:
+                n_gram.append('<s>')
+            #n_gram.append(word_or_start_token(text_list, token_num - countdown))
+        if n == 1:
+            try:
+                n_gram_dict[n_gram[0]] += 1
+            except:
+                n_gram_dict[n_gram[0]] = 1
+        else:
+            try:
+                n_gram_dict[tuple(n_gram)] += 1
+            except:
+                n_gram_dict[tuple(n_gram)] = 1
+    return n_gram_dict
 
-    for word in range(1, len(b)):
-        try:
-            bgd[(b[word-1], b[word])] += 1
-        except:
-            bgd[(b[word-1], b[word])] = 1
-    return bgd
 
 tic = time.time()
-bible = clean_up(bible)
+aa = make_ngrams(bible,1)
 print time.time() - tic
 
 tic = time.time()
-a = make_unigrams(bible)
+bb = make_ngrams(bible,2)
 print time.time() - tic
 
 tic = time.time()
-b = make_bigrams(bible)
+cc = make_ngrams(bible,3)
 print time.time() - tic
+
+tic = time.time()
+cc = make_ngrams(bible,4)
+print time.time() - tic
+
