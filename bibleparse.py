@@ -10,7 +10,6 @@ with open(biblefile, 'rb') as f:
 #sub for 1:1
 #get rid of newlines
 #lowercase-ize
-
 def clean_up(bible):
     #remove xml tags
     bible = re.sub(r'<.*>','',bible)
@@ -23,9 +22,8 @@ def clean_up(bible):
     bible = re.sub(r'\.', '. </s> <s>', bible)
     bible = bible.lower().strip()
     bible = re.split(r' +', bible)
-    bible.append('</s>') #just need this, we have a function that automatically will put <s> at the start
-    print bible[0:50]
-    print bible[-1]
+    bible.append('</s>') #just need this
+    #we automatically put <s> at the start with make_ngrams function
 
     return bible
 
@@ -36,6 +34,7 @@ def word_or_start_token(text_list, token_num):
     else:
         return text_list[token_num]
 
+
 ##make ngrams
 def make_ngrams(text_list, n):
     n_gram_dict = {}
@@ -44,17 +43,24 @@ def make_ngrams(text_list, n):
     #initialize with repeated <s> at the beginning
     for token_num in range(len(text_list)):
         n_gram = []
+
+        #count backwards from n-1 to 0
+        #gives the word at position token_num, along with the previous n-1 words
         for countdown in range_n:
             try:
-                n_gram.append(text_list[token_num-countdown])
+                n_gram.append(text_list[token_num - countdown])
             except:
                 n_gram.append('<s>')
             #n_gram.append(word_or_start_token(text_list, token_num - countdown))
+
+        #for unigrams, key the word directly in the dictionary rather than in a tuple
         if n == 1:
             try:
                 n_gram_dict[n_gram[0]] += 1
             except:
                 n_gram_dict[n_gram[0]] = 1
+
+        #for n > 1, tuples are dict keys
         else:
             try:
                 n_gram_dict[tuple(n_gram)] += 1
@@ -62,6 +68,8 @@ def make_ngrams(text_list, n):
                 n_gram_dict[tuple(n_gram)] = 1
     return n_gram_dict
 
+
+bible = clean_up(bible)
 
 tic = time.time()
 aa = make_ngrams(bible,1)
