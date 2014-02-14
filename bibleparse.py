@@ -128,7 +128,7 @@ class gram:
         if not isinstance(phrase_as_tuple, tuple):
             return 'nope'
 
-         
+
 
 
     def __repr__(self):
@@ -215,7 +215,7 @@ class ngrams:
 
 
     def perplexity(self, corpus_as_list):
-
+        pass
 
 
 
@@ -225,17 +225,17 @@ if __name__ == "__main__":
     t = clean_up(bible)
     tt = ngrams(1, t)
 
-    for each in range(10):
+    for each in range(3):
         print('~~~~~')
-        tt.gen() + '\n'
+        print(tt.gen() + '\n')
 
     tt = ngrams(2, t)
-    for each in range(10):
-        tt.gen(laplace_smoothing = True) + '\n'
+    for each in range(3):
+        print(tt.gen(laplace_smoothing = True) + '\n')
 
-    tt = ngrams(3, t)
-    for each in range(10):
-        tt.gen(tt.gen(laplace_smoothing = True)) + '\n'
+    tt = ngrams(2, t)
+    for each in range(3):
+        print(tt.gen() + '\n')
 
 
 
