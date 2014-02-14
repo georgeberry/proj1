@@ -6,12 +6,38 @@
 
 import re, time
 from functools import wraps
+from random import choice
+import random
 
 #open file
 biblefile = '/Users/georgeberry/Google Drive/Spring 2014/CS5740/proj1/bible_corpus 2/kjbible.train'
 
 with open(biblefile, 'rb') as f:
     bible = f.read()
+
+def clean_up(text):
+    #remove xml tags
+    text = re.sub(r'<.*>','',text)
+    #replace verse numbers (beginning of sentence) with <s> tag
+    text = re.sub(r'[0-9]+:[0-9]+\s*','', text)
+    #replace newlines with spaces (we do a space split below)
+    text = re.sub(r'[\n]+',' ', text)
+    #replace punctuation with a space then that punctuation
+    text = re.sub(r"[^\w\s\']+", " \g<0>", text)
+    text = re.sub(r'\.', '. </s> <s>', text)
+    text = text.lower().strip()
+    text = re.split(r' +', text)
+    text.append('</s>') #just need this
+    #we automatically put <s> at the start with make_ngrams function
+    return text
+
+#helpers
+
+def lookup_default(list, index, default):
+    try:
+        return list[index]
+    except:
+        return default
 
 
 def timer(f):
@@ -23,102 +49,109 @@ def timer(f):
         return result
     return wrapper
 
+class gram:
+    '''
+    holds a tuple of n-1 previous words
+    holds a dictionary of next words, keyed by word with values as counts
+    has a function to return a random next word
+    '''
+    def __init__(self, input_tuple, word):
+        if not isinstance(input_tuple, tuple):
+            if isinstance(input_tuple, str):
+                input_tuple = (input_tuple,)
+            else:
+                return 'intput not convertable to tuple'
 
-class n_grams:
-    def __init__(self, text_as_string, n, prob = True):
-        self.text = text_as_string
+        self.prev_words = input_tuple
+
+        self.cum_sum = 0
+
+        self.next_words = {word : 1}
+
+    def add_next(self, word):
+        if not isinstance(word, str):
+            return 'must input string'
+        try:
+            self.next_words[word] += 1
+        except:
+            self.next_words[word] = 1
+
+    def random_next(self):
+        self.cum_sum = sum(w for c, w in self.next_words.iteritems())
+        r = random.uniform(0, self.cum_sum)
+        left_point = 0
+        for c, w in self.next_words.iteritems():
+            if left_point + w > r:
+                return c
+            left_point += w
+        assert False, "wtf"
+
+class ngrams:
+    '''
+    give this cleaned text as a list of words
+    does a little jiggering for start words
+    can call to spit out sentences
+    '''
+    def __init__(self, n, text_as_list):
         self.n = n
-        self.n_grams_dict = {}
-        self.prob = {}
-        self.total_words = 0
+        self.text = text_as_list
+        self.conditionals = {}
 
-        #kinda hacky, just run this at the beginning
-        self.clean_up()
-        self.make_n_grams()
-        if prob == True:
-            self.calc_prob(text_as_string)
+        self.process()
 
-
-    #sub for <WORDS>
-    #sub for 1:1
-    #get rid of newlines
-    #lowercase-ize
     @timer
-    def clean_up(self):
-        #remove xml tags
-        self.text = re.sub(r'<.*>','',self.text)
-        #replace verse numbers (beginning of sentence) with <s> tag
-        self.text = re.sub(r'[0-9]+:[0-9]+\s*','', self.text)
-        #replace newlines with spaces (we do a space split below)
-        self.text = re.sub(r'[\n]+',' ', self.text)
-        #replace punctuation with a space then that punctuation
-        self.text = re.sub(r"[^\w\s\']+", " \g<0>", self.text)
-        self.text = re.sub(r'\.', '. </s> <s>', self.text)
-        self.text = self.text.lower().strip()
-        self.text = re.split(r' +', self.text)
-        self.text.append('</s>') #just need this
-        #we automatically put <s> at the start with make_ngrams function
+    def process(self):
+        word_range = range(self.n-1, -1, -1)
 
-
-    ##make ngrams
-    @timer
-    def make_n_grams(self):
-
-        range_n = range((self.n-1), -1, -1)
-        self.total_words = len(self.text)
-
-        #initialize with repeated <s> at the beginning
         for token_num in range(len(self.text)):
-            n_gram = []
+            temp = list()
 
-            #count backwards from n-1 to 0
-            #gives the word at position token_num, along with the previous n-1 words
-            for countdown in range_n:
-                try:
-                    n_gram.append(self.text[token_num - countdown])
-                except:
-                    n_gram.append('<s>')
-                #n_gram.append(word_or_start_token(text_list, token_num - countdown))
-            try:
-                self.n_grams_dict[tuple(n_gram)] += 1
+            for countdown in word_range:
+                #iterates up
+                temp.append(lookup_default(self.text, token_num - countdown, '<s>'))
+
+            current_word = temp.pop()
+
+            try: 
+                self.conditionals[tuple(temp)].add_next(current_word)
             except:
-                self.n_grams_dict[tuple(n_gram)] = 1
+                self.conditionals[tuple(temp)] = gram(tuple(temp), current_word)
+
+    def gen(self):
+        sentence = ['<s>']
+        current = '<s>'
+
+        while current != '.':
+            s = self.conditionals[(current,)].random_next()
+            sentence.append(s)
+            current = s
+
+        return ' '.join(sentence)
 
 
-    #ideally, we want to do this in 2 passes for all
-    @timer
-    def calc_prob(self, text_as_string):
-        #if n == 1, simple division
-        if self.n == 1:
-            self.prob = self.n_grams_dict
-            for k, v in self.prob.iteritems():
-                self.prob[k] = float(v)/float(self.total_words)
-        else:
-            self.prob = self.n_grams_dict
-            n_minus_one_dict = n_grams(text_as_string, self.n - 1, prob = False)
-            n_minus_one_dict = n_minus_one_dict.n_grams_dict
+t = clean_up(bible)
 
-            for n_gram in self.prob.keys():
-                n_minus_one_gram = n_gram[1:]
-                self.prob[n_gram] = float(self.prob[n_gram])/float(n_minus_one_dict[n_minus_one_gram])
+tt = ngrams(2, t)
+print tt.gen()
 
 
-            
+'''
+checks
 
+a = gram('dude')
+for each in range(10):
+    a.add_next('bro')
+for each in range(90):
+    a.add_next('brodude')
 
+counts = {}
+for each in range(10000):
+    temp =a.random_next()
+    try:
+        counts[temp] += 1
+    except:
+        counts[temp] = 1
 
-
-'''def word_or_start_token(text_list, token_num):
-    if token_num < 0:
-        return '<s>'
-    else:
-        return text_list[token_num]'''
-
-
-
-
-if __name__ == "__main__":
-    a = n_grams(bible,1)
-    b = n_grams(bible,2)
-    c = n_grams(bible,3)
-    d = n_grams(bible,4)
+print sum(counts.values())
+print counts
+'''
