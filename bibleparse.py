@@ -15,6 +15,18 @@ biblefile = '/Users/georgeberry/Google Drive/Spring 2014/CS5740/proj1/bible_corp
 with open(biblefile, 'rb') as f:
     bible = f.read()
 
+
+def timer(f):
+    @wraps(f)
+    def wrapper(*args,**kwargs):
+        tic = time.time()
+        result = f(*args, **kwargs)
+        print f.__name__ + " took " + str(time.time() - tic) + " seconds"
+        return result
+    return wrapper
+
+
+@timer
 def clean_up(text):
     #remove xml tags
     text = re.sub(r'<.*>','',text)
@@ -31,23 +43,15 @@ def clean_up(text):
     #we automatically put <s> at the start with make_ngrams function
     return text
 
-#helpers
 
+#helpers
 def lookup_default(list, index, default):
     try:
         return list[index]
     except:
         return default
 
-
-def timer(f):
-    @wraps(f)
-    def wrapper(*args,**kwargs):
-        tic = time.time()
-        result = f(*args, **kwargs)
-        print f.__name__ + " took " + str(time.time() - tic) + " seconds"
-        return result
-    return wrapper
+#classes
 
 class gram:
     '''
@@ -86,6 +90,10 @@ class gram:
             left_point += w
         assert False, "wtf"
 
+    def __repr__(self):
+        return 'gram for previous words: ' + str(self.prev_words)
+
+
 class ngrams:
     '''
     give this cleaned text as a list of words
@@ -117,22 +125,40 @@ class ngrams:
             except:
                 self.conditionals[tuple(temp)] = gram(tuple(temp), current_word)
 
+    @timer
     def gen(self):
-        sentence = ['<s>']
-        current = '<s>'
+        sentence = []
 
-        while current != '.':
-            s = self.conditionals[(current,)].random_next()
+        begin_candidates = []
+
+        for k, v in self.conditionals.iteritems():
+            if k[0] == '<s>':
+                begin_candidates.append(k)
+
+        current = random.choice(begin_candidates)
+        sentence.append(current[1])
+
+
+        #print begin_candidates
+        #print self.conditionals
+        #if self.n == 1:
+        #    current = '<s>'
+
+        while current[1] != '.' and current[1] != '?' and current[1] != '!':
+            s = self.conditionals[current].random_next()
             sentence.append(s)
-            current = s
+            current = (sentence[-2], sentence[-1])
 
         return ' '.join(sentence)
 
 
-t = clean_up(bible)
+if __name__ == "__main__":
 
-tt = ngrams(2, t)
-print tt.gen()
+    t = clean_up(bible)
+    tt = ngrams(3, t)
+
+    for each in range(5):
+        print tt.gen() + '\n'
 
 
 '''
