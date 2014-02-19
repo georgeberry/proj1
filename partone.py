@@ -11,19 +11,23 @@ import sys
 
 
 #open file
-biblefile = '/Users/georgeberry/Google Drive/Spring 2014/CS5740/proj1/bible_corpus 2/kjbible.train'
+#biblefile = '/Users/georgeberry/Google Drive/Spring 2014/CS5740/proj1/bible_corpus 2/kjbible.train'
 
-hotelfile = '/Users/georgeberry/Google Drive/Spring 2014/CS5740/proj1/reviews.train'
+#hotelfile = '/Users/georgeberry/Google Drive/Spring 2014/CS5740/proj1/reviews.train'
 
 
-with open(biblefile, 'rb') as f:
-    bible = f.read()
+#with open(biblefile, 'rb') as f:
+#    bible = f.read()
 
-with open(hotelfile, 'rb') as f:
-    hotel = f.read()
+#with open(hotelfile, 'rb') as f:
+#    hotel = f.read()
 
 
 def clean_up(text, n):
+
+    with open(text, 'rb') as f:
+        text = f.read()
+
     '''
     simply cleans text with regex subs.
     assumptions: we want punctuation as its own word; everything lowercase; sentence start tokens but no end tokens (.?!) are end tokens.
@@ -223,27 +227,13 @@ class ngrams:
         return ' '.join(sentence)
 
 
-t = clean_up(hotel, 3)
-
-tt = ngrams(3, t)
-
-for each in range(10):
-    print tt.gen() + '\n'
-
-print tt.vocab
-
-'''
-for each in tt.vocab:
-    r = re.match(r'[^\w]',each)
-    if r:
-        print r.groups()
-
 if __name__ == "__main__":
     n = int(sys.argv[1])
+    f = sys.argv[2]
 
-    t = clean_up(hotel, n)
+    t = clean_up(f, n)
 
     tt = ngrams(n, t)
 
     for each in range(5):
-        print(tt.gen() + '\n')'''
+        print(tt.gen() + '\n')
