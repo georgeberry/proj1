@@ -10,11 +10,11 @@ from random import choice
 import random
 
 #open file
-biblefile = '/Users/georgeberry/Google Drive/Spring 2014/CS5740/proj1/bible_corpus 2/kjbible.train'
+biblefile = 'filepath'
 
-hotelfile = '/Users/georgeberry/Google Drive/Spring 2014/CS5740/proj1/reviews.train'
+hotelfile = 'filepath'
 
-dostoevsky = '/Users/georgeberry/Google Drive/Spring 2014/CS5740/proj1/dostoevsky.txt'
+dostoevsky = 'filepath'
 
 with open(biblefile, 'rb') as f:
     bible = f.read()
