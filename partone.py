@@ -4,7 +4,7 @@ George Berry (geb97) and Antonio Sirianni (ads334) submission
 code written for python 2.7.6 (works well with pypy2)
 
 intended to be called from unixlike command line like so: 
-    $$$python partone.py n_gram filename num_sentences
+    $python partone.py n_gram filename num_sentences
 
     should specify: 
         n_gram size with argv[1]
