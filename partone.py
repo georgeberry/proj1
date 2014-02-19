@@ -5,16 +5,16 @@
 '''
 
 import re, time
-from functools import wraps
 from random import choice
 import random
+import sys
+
 
 #open file
 biblefile = '/Users/georgeberry/Google Drive/Spring 2014/CS5740/proj1/bible_corpus 2/kjbible.train'
 
 hotelfile = '/Users/georgeberry/Google Drive/Spring 2014/CS5740/proj1/reviews.train'
 
-dostoevsky = '/Users/georgeberry/Google Drive/Spring 2014/CS5740/proj1/dostoevsky.txt'
 
 with open(biblefile, 'rb') as f:
     bible = f.read()
@@ -22,20 +22,7 @@ with open(biblefile, 'rb') as f:
 with open(hotelfile, 'rb') as f:
     hotel = f.read()
 
-with open(dostoevsky, 'rb') as f:
-    dos = f.read()
 
-def timer(f):
-    @wraps(f)
-    def wrapper(*args,**kwargs):
-        tic = time.time()
-        result = f(*args, **kwargs)
-        print(f.__name__ + " took " + str(time.time() - tic) + " seconds")
-        return result
-    return wrapper
-
-
-@timer
 def clean_up(text, n):
     '''
     simply cleans text with regex subs.
@@ -44,16 +31,27 @@ def clean_up(text, n):
     e.g. we preserve contractions
     '''
 
+    '''
+    need to change this to avoid splitting up things like e.e. and etc.
+
+    maybe only split on periods if there is a space then a capital letter???
+
+    '''
+
     #remove xml tags
     text = re.sub(r'<.*>','',text)
     #replace verse numbers (beginning of sentence) with <s> tag
-    text = re.sub(r'[0-9]+(:|,)[0-9]+\s*','', text)
+    text = re.sub(r'[0-9]+[:,][0-9]+(,*)\s*','', text)
     #replace newlines with spaces (we do a space split below)
     text = re.sub(r'[\n]+',' ', text)
     #replace punctuation with a space then that punctuation
-    text = re.sub(r'[^(\w\s\')]+', ' \g<0> ', text) #puts space around punctuation
 
-    text = re.sub(r'(\.)|(\!)|(\?)', '\g<0> </s>', text) #puts an end sentence token after each sentence
+    text = re.sub(r'[^\w\s\'\.!\?]', ' \g<0> ', text) #puts space around punctuation except sentence enders
+
+    text = re.sub(r'(\.+)|(!+)|(\?+)', ' \g<0> </s> ', text) #puts an end sentence token after each sentence along with whitespace.
+
+    #specificially for slashes, which can cause some trouble
+    #text = re.sub(r'(\w|\s)(/+)(\w|\s)', '\g<1> \g<2> \g<3>', text)
 
     for x in range(n-1):
         text = re.sub('</s>', '</s> <s>', text)
@@ -67,13 +65,13 @@ def clean_up(text, n):
     return text
 
 
-def lookup_default(list, index, default):
+def lookup_default(L, index, default):
     '''
     for large number of calls to lists that may or may not have items
     allows easy specification of a default
     '''
     try:
-        return list[index]
+        return L[index]
     except:
         return default
 
@@ -92,13 +90,6 @@ class gram:
     data structure:
         holds a dictionary of next words, keyed by word with values as empirical counts in the training set
 
-    smoothing strategy:
-        when we smooth, we keep B probability for the original words (with augmented counts)
-        so when smoothing, we update the counts, store them internally (so only computed once)
-        then, with probability A = 1 - B, we pick an unseen word. 
-            the method for doing so depends on the type of smoothing
-        again, getting a smoothed next word can be done with the appropriate function call
-            although you do have to provide a vocabulary, V, as well
     '''
     def __init__(self, input_tuple, word):
         if not isinstance(input_tuple, tuple):
@@ -140,65 +131,12 @@ class gram:
             left_point += w
         assert False, "wtf"
 
+
     def random_next(self):
         '''
         easily call an unsmoothed next word
         '''
         return self.next(self.next_words)
-
-    @staticmethod
-    def seen_words(word_dict):
-        return set(c for c, w in word_dict.iteritems())
-
-    @staticmethod
-    def count(word_dict):
-        return sum(w for c, w in word_dict.iteritems())
-
-
-    def laplace_next(self, words_in_vocab):
-        '''
-        idea here:
-        there are two groups, A and B:
-            we have seen empirically words in A. 
-            we are smoothing for words in B.
-
-            the empirical words have a chunk of the total smoothed probability
-                this is given by: (W + #W)/(W + V). W is unsmoothed counts of seen words; #W is unique # seen words; V is # words in vocab
-
-            choose number uniform at random between (0, W + V)
-            if num > (W + #W)/(W + V), pick a random word from class B
-
-            otherwise, pick one with weighted probability (given by smoothed counts) from class A
-        '''
-        laplace = self.next_words
-
-        for key, val in laplace.iteritems():
-            laplace[key] += 1
-
-        cut_point = self.count(laplace)/(self.count(self.next_words) + len(words_in_vocab))
-
-        r = random.uniform(0, self.count(self.next_words) + len(words_in_vocab))
-
-        if r < cut_point:
-            return self.next(laplace)
-        else: 
-            return random.choice(list(set(words_in_vocab) - self.seen_words(laplace)))
-
-
-    def phrase_probability(self, next_word):
-        '''
-        for computing perplexity of smoothed n-grams
-
-        give it a next word, it'll tell you the probability of that next word
-
-
-        '''
-        if not isinstance(phrase_as_tuple, tuple):
-            return 'nope'
-
-        self.cum_sum = sum(w for c, w in word_dict.iteritems())
-
-
 
 
     def __repr__(self):
@@ -222,12 +160,11 @@ class ngrams:
     def __init__(self, n, text_as_list):
         self.n = n
         self.text = text_as_list
-        self.vocab = set(text_as_list)
+        self.vocab = list(set(text_as_list))
         self.conditionals = {}
 
         self.process()
 
-    @timer
     def process(self):
         word_range = range(self.n-1, -1, -1)
 
@@ -241,13 +178,12 @@ class ngrams:
 
             current_word = temp.pop()
 
-            try: 
+            try:
                 self.conditionals[tuple(temp)].add_next(current_word)
             except:
                 self.conditionals[tuple(temp)] = gram(tuple(temp), current_word)
 
-    @timer
-    def gen(self, laplace_smoothing = False):
+    def gen(self):
         ''' 
         function to generate a sentence
 
@@ -263,85 +199,51 @@ class ngrams:
             in this case, we just pick a random word
         '''
 
-
-        sentence = ['<s>']*(self.n-1)
-
-        #if self.n > 1:
-        #    begin_candidates = []
-
-        #    for k, v in self.conditionals.iteritems():
-        #        if k[0] == '<s>':
-        #            begin_candidates.append(k)
-
-        #    current = random.choice(begin_candidates)
-        #    for word in current:
-        #        sentence.append(word)
-        #else:
-        #    sentence.append(self.conditionals[()].random_next())
+        if self.n > 1:
+            sentence = ['<s>']*(self.n-1)
+        else:
+            sentence = ['<s>']
 
         current = sentence[-self.n+1:]
 
-        while sentence[-1] != '.' and sentence[-1] != '?' and sentence[-1] != '!':
+        while sentence[-1] != '</s>':
             if self.n > 1:
-                if laplace_smoothing == False:
-                    s = self.conditionals[tuple(current)].random_next()
-                elif laplace_smoothing == True:
-                    try:
-                        s = self.conditionals[tuple(current)].laplace_next(self.vocab)
-                    except: #maybe our n-1 gram isn't in the text. assume all words are equally likely
-                        #reduces to 1/V, or a random choice from the vocab words
-                        s = random.choice(list(self.vocab))
+                s = self.conditionals[tuple(current)].random_next()
 
                 sentence.append(s)
+
                 current = sentence[-self.n+1:]
             else:
-                if laplace_smoothing == False:
-                    s = self.conditionals[()].random_next() #for unigram
-                elif laplace_smoothing == True:
-                    s = self.conditionals[()].laplace_next(self.vocab)
+                s = self.conditionals[()].random_next() #for unigram
+                
                 sentence.append(s)
+
                 current = tuple()
                 
         return ' '.join(sentence)
-
-
-    def perplexity(self, corpus_as_list):
-
-
-        pass
-
-
 
 
 t = clean_up(hotel, 3)
 
 tt = ngrams(3, t)
 
-for each in range(5):
-    print(tt.gen(laplace_smoothing=False) + '\n')
+for each in range(10):
+    print tt.gen() + '\n'
 
-'''if __name__ == "__main__":
-    t = clean_up(hotelfile, 3)
-
-    tt = ngrams(3, t)
-
-    for each in range(5):
-        print(tt.gen(laplace_smoothing=False) + '\n')
-
-    #tt = ngrams(1, t)
-
-    #for each in range(3):
-    #    print('~~~~~')
-    #    print(tt.gen() + '\n')
-
-    tt = ngrams(2, t)
-    for each in range(5):
-        print(tt.gen(laplace_smoothing = False) + '\n')'''
-
-
-
+print tt.vocab
 
 '''
-1) change line 39 to interpolate n-1 "<s>" tokens at the start of the text and between each sentence
-2)
-'''
+for each in tt.vocab:
+    r = re.match(r'[^\w]',each)
+    if r:
+        print r.groups()
+
+if __name__ == "__main__":
+    n = int(sys.argv[1])
+
+    t = clean_up(hotel, n)
+
+    tt = ngrams(n, t)
+
+    for each in range(5):
+        print(tt.gen() + '\n')'''
