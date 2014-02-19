@@ -2,27 +2,28 @@
 @by George Berry
 @geb97@cornell.edu
 @created 2/8/2014
+
+should be run with pypy
 '''
 
 import re, time
 from random import choice
 import random
 import sys
+from functools import wraps
 
 
-#open file
-#biblefile = '/Users/georgeberry/Google Drive/Spring 2014/CS5740/proj1/bible_corpus 2/kjbible.train'
-
-#hotelfile = '/Users/georgeberry/Google Drive/Spring 2014/CS5740/proj1/reviews.train'
-
-
-#with open(biblefile, 'rb') as f:
-#    bible = f.read()
-
-#with open(hotelfile, 'rb') as f:
-#    hotel = f.read()
+def timer(f):
+    @wraps(f)
+    def wrapper(*args,**kwargs):
+        tic = time.time()
+        result = f(*args, **kwargs)
+        print(f.__name__ + " took " + str(time.time() - tic) + " seconds")
+        return result
+    return wrapper
 
 
+@timer
 def clean_up(text, n):
 
     with open(text, 'rb') as f:
@@ -30,54 +31,41 @@ def clean_up(text, n):
 
     '''
     simply cleans text with regex subs.
-    assumptions: we want punctuation as its own word; everything lowercase; sentence start tokens but no end tokens (.?!) are end tokens.
-    except '
-    e.g. we preserve contractions
+    assumptions: we want punctuation as its own word; everything lowercase
+    assume sentences end with 1+ repetitions of .?!
+    keep ' the way it is: i.e. we don't separate contractions
     '''
 
-    '''
-    need to change this to avoid splitting up things like e.e. and etc.
-
-    maybe only split on periods if there is a space then a capital letter???
-
-    '''
 
     #remove xml tags
     text = re.sub(r'<.*>','',text)
+
     #replace verse numbers (beginning of sentence) with <s> tag
     text = re.sub(r'[0-9]+[:,][0-9]+(,*)\s*','', text)
+
     #replace newlines with spaces (we do a space split below)
     text = re.sub(r'[\n]+',' ', text)
-    #replace punctuation with a space then that punctuation
 
-    text = re.sub(r'[^\w\s\'\.!\?]', ' \g<0> ', text) #puts space around punctuation except sentence enders
+    #puts space around punctuation except sentence enders
+    text = re.sub(r'[^\w\s\'\.!\?]', ' \g<0> ', text)
 
-    text = re.sub(r'(\.+)|(!+)|(\?+)', ' \g<0> </s> ', text) #puts an end sentence token after each sentence along with whitespace.
+    #puts an end sentence token after each sentence along with whitespace.
+    text = re.sub(r'(\.+)|(!+)|(\?+)', ' \g<0> </s> ', text) 
 
-    #specificially for slashes, which can cause some trouble
-    #text = re.sub(r'(\w|\s)(/+)(\w|\s)', '\g<1> \g<2> \g<3>', text)
-
+    #put n-1 <s> tokens before every </s> token
     for x in range(n-1):
         text = re.sub('</s>', '</s> <s>', text)
 
+    #lowercase, remove leading/trailing spaces
     text = text.lower().strip()
+
+    #split on 1+ spaces
     text = re.split(r' +', text)
 
     for x in range(n-1):
         text.insert(0, '<s>')
 
     return text
-
-
-def lookup_default(L, index, default):
-    '''
-    for large number of calls to lists that may or may not have items
-    allows easy specification of a default
-    '''
-    try:
-        return L[index]
-    except:
-        return default
 
 
 #classes
@@ -169,46 +157,50 @@ class ngrams:
 
         self.process()
 
+    @timer
     def process(self):
-        word_range = range(self.n-1, -1, -1)
+        word_range = range(self.n)
 
-        #make unsmoothed
-        for token_num in range(len(self.text)):
-            temp = list()
+        #word_range = range(self.n-1, -1, -1)
 
-            for countdown in word_range:
+        for token_num in range(len(self.text) - self.n + 1):
+            temp_n_gram = list()
+
+            for countup in word_range:
                 #iterates up
-                temp.append(lookup_default(self.text, token_num - countdown, '<s>'))
+                #start from the beginning
+                #note that our first ngram will be n-1 <s> predicting our first word
+                temp_n_gram.append(self.text[token_num + countup])
 
-            current_word = temp.pop()
+            #pop the last (current) word
+            current_word = temp_n_gram.pop()
 
             try:
-                self.conditionals[tuple(temp)].add_next(current_word)
+                #increment class instance
+                self.conditionals[tuple(temp_n_gram)].add_next(current_word)
             except:
-                self.conditionals[tuple(temp)] = gram(tuple(temp), current_word)
+                #initialize class instance
+                self.conditionals[tuple(temp_n_gram)] = gram(tuple(temp_n_gram), current_word)
 
+    @timer
     def gen(self):
         ''' 
         function to generate a sentence
 
-        extremely straightfoward. 
+        extremely straightfoward. relies on calls to the appropriate gram instance
 
-        start items need to be fixed: right now we just pick a random n-1 tuple that begins with <s>
-
-        then, run a while loop stopping if the prev character was .!?
-
-        note for laplace smoothing: we run into the possibility of the appropriate (n-1) gram not being in the text
-            this is the try/except block on line 243-5
-
-            in this case, we just pick a random word
+        start with n-1 <s> and then keep going until we see </s>
         '''
 
         if self.n > 1:
             sentence = ['<s>']*(self.n-1)
-        else:
+
+            #current keeps track of preceding n-1 words
+            current = sentence[-self.n+1:]
+        elif self.n == 1:
             sentence = ['<s>']
 
-        current = sentence[-self.n+1:]
+
 
         while sentence[-1] != '</s>':
             if self.n > 1:
@@ -217,7 +209,7 @@ class ngrams:
                 sentence.append(s)
 
                 current = sentence[-self.n+1:]
-            else:
+            elif self.n == 1:
                 s = self.conditionals[()].random_next() #for unigram
                 
                 sentence.append(s)
