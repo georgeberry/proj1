@@ -1,29 +1,23 @@
 '''
-@by George Berry
-@geb97@cornell.edu
-@created 2/8/2014
+George Berry (geb97) and Antonio Sirianni (ads334) submission
 
-should be run with pypy
+code written for python 2.7.6 (works well with pypy2)
+
+intended to be called from unixlike command line like so: 
+    $$$python partone.py n_gram filename num_sentences
+
+    should specify: 
+        n_gram size with argv[1]
+        filename with argv[2]
+        number of sentences to make with argv[3]
 '''
 
-import re, time
+import re
 from random import choice
 import random
 import sys
-from functools import wraps
 
 
-def timer(f):
-    @wraps(f)
-    def wrapper(*args,**kwargs):
-        tic = time.time()
-        result = f(*args, **kwargs)
-        print(f.__name__ + " took " + str(time.time() - tic) + " seconds")
-        return result
-    return wrapper
-
-
-@timer
 def clean_up(text, n):
 
     with open(text, 'rb') as f:
@@ -35,8 +29,6 @@ def clean_up(text, n):
     assume sentences end with 1+ repetitions of .?!
     keep ' the way it is: i.e. we don't separate contractions
     '''
-
-
     #remove xml tags
     text = re.sub(r'<.*>','',text)
 
@@ -77,10 +69,11 @@ class gram:
     can add w_n's 1 at a time
         the total distribution is stored in this object
 
-    can call the object to get a probabalistically-determined next word
+    can call object method to get a probabalistically-determined next word
 
     data structure:
-        holds a dictionary of next words, keyed by word with values as empirical counts in the training set
+        holds a dictionary of next words, keyed by next word 
+        with values as empirical counts in the training set
 
     '''
     def __init__(self, input_tuple, word):
@@ -108,28 +101,19 @@ class gram:
         except:
             self.next_words[word] = 1
 
-    def next(self, word_dict):
+    def random_next(self):
         '''
         given a conditional probability word_dict, 
         returns a random word
-        swears if something goes horribly wrong
         '''
-        self.cum_sum = sum(w for c, w in word_dict.iteritems())
+        self.cum_sum = sum(w for c, w in self.next_words.iteritems())
         r = random.uniform(0, self.cum_sum)
         left_point = 0
-        for c, w in word_dict.iteritems():
-            if left_point + w > r:
+        for c, w in self.next_words.iteritems():
+            if left_point + w >= r:
                 return c
             left_point += w
-        assert False, "wtf"
-
-
-    def random_next(self):
-        '''
-        easily call an unsmoothed next word
-        '''
-        return self.next(self.next_words)
-
+        assert False, "error"
 
     def __repr__(self):
         return 'gram for previous words: ' + str(self.prev_words)
@@ -142,12 +126,9 @@ class ngrams:
     can call to spit out sentences
 
     the meat of this:
-        makes a dictionary keyed by n-1 grams with values as instances of the "gram" class
-        to generate sentences, etc., we can just quickly "ask" the appropriate "gram" instance for a next word
-        this works quickly because the dict lookup is basically free
-        then, the determinig of the next word is relatively quick (see gram.gen)
-
-    only loops through data once for setup
+        makes a dictionary at self.conditionals keyed by n-1 grams \
+            with values as instances of the "gram" class
+        to generate sentences, "ask" the appropriate "gram" instance for a next word
     '''
     def __init__(self, n, text_as_list):
         self.n = n
@@ -157,11 +138,9 @@ class ngrams:
 
         self.process()
 
-    @timer
+
     def process(self):
         word_range = range(self.n)
-
-        #word_range = range(self.n-1, -1, -1)
 
         for token_num in range(len(self.text) - self.n + 1):
             temp_n_gram = list()
@@ -169,7 +148,7 @@ class ngrams:
             for countup in word_range:
                 #iterates up
                 #start from the beginning
-                #note that our first ngram will be n-1 <s> predicting our first word
+                #note that our first ngram will be (n-1)*<s> predicting our first word
                 temp_n_gram.append(self.text[token_num + countup])
 
             #pop the last (current) word
@@ -182,12 +161,12 @@ class ngrams:
                 #initialize class instance
                 self.conditionals[tuple(temp_n_gram)] = gram(tuple(temp_n_gram), current_word)
 
-    @timer
+
     def gen(self):
         ''' 
         function to generate a sentence
 
-        extremely straightfoward. relies on calls to the appropriate gram instance
+        relies on calls to the appropriate gram instance in self.conditionals
 
         start with n-1 <s> and then keep going until we see </s>
         '''
@@ -199,7 +178,6 @@ class ngrams:
             current = sentence[-self.n+1:]
         elif self.n == 1:
             sentence = ['<s>']
-
 
 
         while sentence[-1] != '</s>':
@@ -222,10 +200,11 @@ class ngrams:
 if __name__ == "__main__":
     n = int(sys.argv[1])
     f = sys.argv[2]
+    k = int(sys.argv[3])
 
     t = clean_up(f, n)
 
     tt = ngrams(n, t)
 
-    for each in range(5):
-        print(tt.gen() + '\n')
+    for each in range(k):
+        print tt.gen() + '\n' 
