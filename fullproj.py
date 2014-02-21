@@ -1,15 +1,7 @@
 '''
-George Berry (geb97) and Antonio Sirianni (ads334) submission
-
-code written for python 2.7.6 (works well with pypy2)
-
-intended to be called from unixlike command line like so: 
-    $python partone.py n_gram filename num_sentences
-
-    should specify: 
-        n_gram size with argv[1]
-        filename with argv[2]
-        number of sentences to make with argv[3]
+@George Berry (geb97)
+@2/21/2014
+@proj1 for NLP
 '''
 
 import re
