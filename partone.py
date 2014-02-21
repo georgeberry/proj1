@@ -16,7 +16,30 @@ import re
 from random import choice
 import random
 import sys
+import time
+from functools import wraps
+from itertools import islice
 
+
+def window(iterable, size):
+    it = iter(iterable)
+    result = tuple(islice(it, size))
+
+    if len(result) == size:
+        yield result
+    for elem in it:
+        result = result[1:] + (elem,)
+        yield result
+
+
+def timer(f):
+    @wraps(f)
+    def wrapper(*args,**kwargs):
+        tic = time.time()
+        result = f(*args, **kwargs)
+        print(f.__name__ + " took " + str(time.time() - tic) + " seconds")
+        return result
+    return wrapper
 
 def clean_up(text, n):
 
@@ -96,6 +119,9 @@ class gram:
         '''
         if not isinstance(word, str):
             return 'must input string'
+        
+        #self.next_words[word] = self.next_words.get(word, 0) + 1
+
         try:
             self.next_words[word] += 1
         except:
@@ -114,6 +140,12 @@ class gram:
                 return c
             left_point += w
         assert False, "error"
+
+    def good_turing_next(self, words_in_vocab, n):
+        '''
+
+
+        '''
 
     def __repr__(self):
         return 'gram for previous words: ' + str(self.prev_words)
@@ -138,29 +170,20 @@ class ngrams:
 
         self.process()
 
-
+    @timer
     def process(self):
         word_range = range(self.n)
 
-        for token_num in range(len(self.text) - self.n + 1):
-            temp_n_gram = list()
-
-            for countup in word_range:
-                #iterates up
-                #start from the beginning
-                #note that our first ngram will be (n-1)*<s> predicting our first word
-                temp_n_gram.append(self.text[token_num + countup])
-
-            #pop the last (current) word
-            current_word = temp_n_gram.pop()
+        for gram_tuple in window(self.text, self.n):
+            #prev_n_minus_one = gram_tuple[:-1]
+            #current_word = gram_tuple[-1]
 
             try:
                 #increment class instance
-                self.conditionals[tuple(temp_n_gram)].add_next(current_word)
+                self.conditionals[tuple(gram_tuple[:-1])].add_next(gram_tuple[-1])
             except:
                 #initialize class instance
-                self.conditionals[tuple(temp_n_gram)] = gram(tuple(temp_n_gram), current_word)
-
+                self.conditionals[tuple(gram_tuple[:-1])] = gram(tuple(gram_tuple[:-1]), gram_tuple[-1])
 
     def gen(self):
         ''' 
@@ -187,12 +210,11 @@ class ngrams:
                 sentence.append(s)
 
                 current = sentence[-self.n+1:]
+
             elif self.n == 1:
                 s = self.conditionals[()].random_next() #for unigram
                 
                 sentence.append(s)
-
-                current = tuple()
                 
         return ' '.join(sentence)
 
@@ -205,6 +227,8 @@ if __name__ == "__main__":
     t = clean_up(f, n)
 
     tt = ngrams(n, t)
+
+    print(len(set(tt.text)))
 
     for each in range(k):
         print tt.gen() + '\n' 
