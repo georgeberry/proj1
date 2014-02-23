@@ -1,3 +1,5 @@
+from __future__ import division
+
 '''
 @George Berry (geb97)
 @2/21/2014
@@ -11,6 +13,7 @@ import sys
 import time
 from functools import wraps
 from itertools import islice
+import math
 
 
 #sliding window
@@ -108,7 +111,7 @@ class gram:
         self.cum_sum = None
 
         #good turing counts
-        self.gt_next_counts = None
+        self.gt_next_counts = {}
         self.gt_sum = None
         self.gt_seen_sum = None
         self.c_0 = None
@@ -131,7 +134,7 @@ class gram:
             self.next_words[word] = 1
 
         self.cum_sum = None
-        self.gt_next_counts = None
+        self.gt_next_counts = {}
         self.gt_sum = None
         self.c_0 = None
 
@@ -144,10 +147,10 @@ class gram:
         if self.cum_sum == None:
             self.cum_sum = sum(w for c, w in self.next_words.iteritems())
 
-        return self.__weighted_next__(self)
+        return self._weighted_next(self)
 
 
-    def __weighted_next__(self, t = 'unsmoothed'):
+    def _weighted_next(self, t = 'unsmoothed'):
         if t == 'unsmoothed':
             r = random.uniform(0, self.cum_sum)
             left_point = 0
@@ -169,48 +172,79 @@ class gram:
 
     def gt_random(self, vocab_set, freq_of_freq_dict, k_cutoff):
 
-        if self.c_0 == None:
-            N_1_counts = freq_of_freq_dict[1]
-            N_0_counts = len(vocab_set)**(n-1) - sum(freq_of_freq_dict.values())
-            self.c_0 = float(N_1_counts)/float(N_0_counts)
+        '''
+        Implements good-turing smoothing with a cutoff.
 
-        if self.gt_next_counts == None:
-        #print self.next_words.keys()
-        #print self.next_words.values()
-        #print freq_of_freq_dict
-            self.gt_next_counts = {k: self.gt_counts(v, k_cutoff, freq_of_freq_dict) for k, v in self.next_words.iteritems()}
+        develops a count of c_0, by computing all possible n_grams (vocab^n)
+            subtracts the total observed
 
-        #print self.next_words
-        #print self.gt_next_counts
+        this is a kind of ``global'' good-turing: we take the counts over all
+            n_grams, rather than implementing good turing seperately for each conditional probability
 
-        if self.gt_sum == None or self.gt_seen_sum == None:
-            self.gt_seen_sum = sum(w for c, w in self.gt_next_counts.iteritems())
+        '''
 
-        #add # unseen words times counts for unseen words
+        N_1_counts = freq_of_freq_dict[1]
+        N_0_counts = len(vocab_set)**(len(self.prev_words) + 1) - sum(freq_of_freq_dict.values())
+
+        self.c_0 = N_1_counts/N_0_counts
+
+        for k, v in self.next_words.iteritems():
+            self.gt_next_counts[k] = self.gt_counts(v, k_cutoff, freq_of_freq_dict)
+
+        #self.gt_next_counts = {k: self.gt_counts(v, k_cutoff, freq_of_freq_dict) for k, v in self.next_words.iteritems()}
+
+        #if self.gt_sum == None or self.gt_seen_sum == None:
+        self.gt_seen_sum = sum(w for c, w in self.gt_next_counts.iteritems())
+
+        #add smoothed counts with implied 0 counts
         self.gt_sum = self.gt_seen_sum + (len(vocab_set) - len(self.gt_next_counts.keys()))*(self.c_0)
 
         r = random.uniform(0, self.gt_sum)
 
         #pick unseen word with B = #unseen/#total, then uniform at random
-        if r < (1. - float(self.gt_seen_sum))/float(self.gt_sum):
+        if r < (1. - self.gt_seen_sum)/self.gt_sum:
             return random.choice(list(vocab_set - set(self.gt_next_counts.keys())))
 
         #pick seen with prob 1-B, then weighted by adjusted freq counts
         else:
-            return self.__weighted_next__(t = 'turing')
+            return self._weighted_next(t = 'turing')
+
+
+    def return_prob(self, current_word, vocab_set, freq_of_freq_dict, k_cutoff):
+        '''give this a word
+            will return the conditional probability of seeing the word
+            given previous two
+        '''
+
+        N_1_counts = freq_of_freq_dict[1]
+        N_0_counts = len(vocab_set)**(len(self.prev_words) + 1) - sum(freq_of_freq_dict.values())
+
+        for k, v in self.next_words.iteritems():
+            self.gt_next_counts[k] = self.gt_counts(v, k_cutoff, freq_of_freq_dict)
+
+        self.c_0 = N_1_counts/N_0_counts
+
+        self.gt_seen_sum = sum(w for c, w in self.gt_next_counts.iteritems())
+
+        self.gt_sum = self.gt_seen_sum + (len(vocab_set) - len(self.gt_next_counts.keys()))*(self.c_0)
+
+
+
+        #print self.gt_next_counts.get(current_word, self.c_0)/self.gt_sum
+
+        #count of current word over sum of all words in that row gives conditional prob
+        return self.gt_next_counts.get(current_word, self.c_0)/self.gt_sum
 
 
     @staticmethod
     def gt_counts(c, k, ffd):
-        c = float(c)
-        k = float(k)
 
         if c > 2:
             return c
         else:
             #c* equaiton from page 103
             #print ((c+1)*(ffd[c+1]/ffd[c]) - (c*(k + 1)*ffd[k+1])/(ffd[1]))*(1 - (k+1)*ffd[k+1]/ffd[1])
-            return ((c+1)*(float(ffd[c+1])/float(ffd[c])) - (c*(k + 1)*float(ffd[k+1]))/(float(ffd[1])))*(1 - (k+1)*float(ffd[k+1])/float(ffd[1]))
+            return ( ( (c+1)*(ffd[c+1]/ffd[c]) ) - ( c*( (k + 1)*ffd[k+1] )/ffd[1] ) )/(1 - ( (k+1)*(ffd[k+1])/ffd[1] ) )
 
 
     def num_times_seen(self):
@@ -247,6 +281,8 @@ class ngrams:
         self.conditionals = {}
 
         self.gt_process()
+
+        self.k_cutoff = 2
 
     @timer
     def process(self):
@@ -310,7 +346,7 @@ class ngrams:
                 #    print 'not in'
 
                 try:
-                    s = self.conditionals[tuple(current)].gt_random(set(self.vocab), self.freq_of_freqs, 20)
+                    s = self.conditionals[tuple(current)].gt_random(set(self.vocab), self.freq_of_freqs, self.k_cutoff)
                 except:
                     s = random.choice(self.vocab)
 
@@ -319,26 +355,69 @@ class ngrams:
                 current = sentence[-self.n+1:]
 
             elif self.n == 1:
-                s = self.conditionals[()].gt_random(set(self.vocab), self.freq_of_freqs, 20) #for unigram
+                s = self.conditionals[()].gt_random(set(self.vocab), self.freq_of_freqs, self.k_cutoff) #for unigram
                 
                 sentence.append(s)
-                
+
+
         return ' '.join(sentence)
+
+    @timer
+    def perplexity(self, corpus_as_list):
+        '''
+        should be called after gt_process
+
+        uses log base 2 to calc perplexity
+        '''
+
+        denominator = 0.
+
+        for gram_tuple in window(corpus_as_list, self.n):
+
+            #need to do something special for n = 1
+
+            prev_n_minus_one = gram_tuple[:-1]
+            current_word = gram_tuple[-1]
+
+
+
+            unseen_prob = self.freq_of_freqs[1]/sum(k*v for k,v in self.freq_of_freqs.iteritems())
+
+            try:
+                denominator += math.log(self.conditionals[prev_n_minus_one].return_prob(current_word, self.vocab, self.freq_of_freqs, self.k_cutoff)**(-1./len(self.text)), 2)
+
+            fix:
+                this needs to be fixed
+                i think it should be divided by the number of unseen ngrams
+                denominator += math.log(unseen_prob**(-1./len(self.text)), 2)
+
+        return 2**denominator
 
 
 if __name__ == "__main__":
+
+    #n for n gram
     n = int(sys.argv[1])
+
+    #file
     f = sys.argv[2]
-    k = int(sys.argv[3])
+
+    #sentences to gen
+    s = int(sys.argv[3])
+
+    #perplexity corpus
+    p = sys.argv[4]
 
     t = clean_up(f, n)
+    p = clean_up(p, n)
 
     tt = ngrams(n, t)
 
-    #print tt.freq_of_freqs
-    #print len(tt.vocab)
+    print tt.perplexity(p)
 
-    for each in range(k):
+
+    for each in range(s):
         print tt.gen() + '\n' 
 
+    #print tt.conditionals[('the',)].next_words
     #print tt.conditionals[('the',)].gt_next_counts
