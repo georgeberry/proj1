@@ -236,11 +236,10 @@ class gram:
         if current_word in self.gt_next_counts:
             #print current_word
             #print self.gt_next_counts[current_word]
-            return self.gt_next_counts[current_word]
+            return self.gt_next_counts[current_word]/self.gt_sum
         else:
             #print current_word
-            #print self.c_0
-            return self.c_0
+            return self.c_0/self.gt_sum
 
         #return self.gt_next_counts.get(current_word, self.c_0)/self.gt_sum
 
@@ -258,11 +257,11 @@ class gram:
             return ( ( (c+1)*(ffd[c+1]/ffd[c]) ) - ( c*( (k + 1)*ffd[k+1] )/ffd[1] ) )/(1 - ( (k+1)*(ffd[k+1])/ffd[1] ) )
 
     def num_times_seen(self):
-        if self.cum_sum:
-            return self.cum_sum
-        else:
-            self.cum_sum = sum(w for c, w in self.next_words.iteritems())
-            return self.cum_sum
+        '''
+        returns a list of the number of times each n_gram is seen
+
+        '''
+        return self.next_words.values()
 
     def gt_setup(self, vocab_list, freq_of_freq_dict, k_cutoff):
         '''
@@ -277,10 +276,9 @@ class gram:
             #print sum(freq_of_freq_dict.values())
 
             N_1_counts = freq_of_freq_dict[1]
-            N_0_counts = (len(vocab_list)**(len(self.prev_words) + 1)) - sum(freq_of_freq_dict.values())
 
-            #print N_1_counts
-            #print N_0_counts
+            #unique total ngrams - unique seen ngrams
+            N_0_counts = (len(vocab_list)**(len(self.prev_words) + 1)) - sum(freq_of_freq_dict.values())
 
             self.c_0 = N_1_counts/N_0_counts
 
@@ -290,7 +288,6 @@ class gram:
 
             for k, v in self.next_words.iteritems():
                 self.gt_next_counts[k] = self.gt_counts(v, k_cutoff, freq_of_freq_dict)
-
 
         #fancier way: need to check
         #self.gt_next_counts = {k: self.gt_counts(v, k_cutoff, freq_of_freq_dict) for k, v in self.next_words.iteritems()}
@@ -302,9 +299,8 @@ class gram:
             #give the rest the default probability self.c_0 and add it that many times to self.gt_sum
             self.gt_sum = self.gt_seen_sum + (len(vocab_list) - len(self.gt_next_counts.keys()))*(self.c_0)
 
-
     def __repr__(self):
-        return 'gram for previous words: ' + str(self.prev_words)
+        return str(self.next_words)
 
 
 class ngrams:
@@ -322,7 +318,7 @@ class ngrams:
         self.n = n
         self.text = text_as_list
 
-        self.k_cutoff = 2
+        self.k_cutoff = 20
 
         #this should be converted to a dictionary for fast lookup
         self.vocab = {}
@@ -333,7 +329,7 @@ class ngrams:
 
         #records number of times different N_grams appear a number of times
         self.freq_of_freqs = {}
-        self.num_words = None
+        self.unique_words = None
 
         #creates gram class instances
         #initializes freq_of_freqs dict
@@ -362,7 +358,7 @@ class ngrams:
 
         self.text, self.vocab = self.handle_unknowns(self.text)
 
-        self.num_words = len(self.vocab.keys())
+        self.unique_words = len(self.vocab.keys())
 
         for gram_tuple in window(self.text, self.n):
             prev_n_minus_one = gram_tuple[:-1]
@@ -377,11 +373,12 @@ class ngrams:
 
         #make freq of freq dict
         for v in self.conditionals.values():
-            try:
-                self.freq_of_freqs[v.num_times_seen()] += 1
-            except:
-                self.freq_of_freqs[v.num_times_seen()] = 1
 
+            for count in v.num_times_seen():
+                try:
+                    self.freq_of_freqs[count] += 1
+                except:
+                    self.freq_of_freqs[count] = 1
     
     @timer
     def gt_gen(self):
@@ -392,8 +389,6 @@ class ngrams:
 
         start with n-1 <s> and then keep going until we see </s>
         '''
-
-
 
         if self.n > 1:
             sentence = ['<s>']*(self.n-1)
@@ -464,20 +459,23 @@ class ngrams:
             if corpus_as_list[word] not in self.vocab:
                 corpus_as_list[word] = '<unk>'
 
+        #print self.conditionals
 
         denominator = 0.
 
         #probability of seeing any unseen word is U = N_1/N
         #probability of seeing a given word is U = num_unseen
         #num_unseen is len(vocab)^n - num_seen
-        seen_n_grams = sum(k*v for k,v in self.freq_of_freqs.iteritems())
-        theoretical_n_grams = self.num_words**(self.n)
-
+        seen_n_grams = sum(self.freq_of_freqs.values())
+        theoretical_n_grams = self.unique_words**(self.n)
 
         #does this need to be divided by all unseen ngrams?
-        p_unseen_ngram = ( self.freq_of_freqs[1]/seen_n_grams ) #/ (theoretical_n_grams - seen_n_grams)
+        #yes: 
+        #c_unseen_n_gram = ( self.freq_of_freqs[1]) / (theoretical_n_grams - seen_n_grams)
 
-        p_log_unseen = math.log(p_unseen_ngram**(-1./len(self.text)), 2)
+
+
+        #log_p_unseen = math.log(c_unseen_n_gram**(-1./len(self.text)), 2)
 
 
         for gram_tuple in window(corpus_as_list, self.n):
@@ -487,14 +485,16 @@ class ngrams:
             prev_n_minus_one = gram_tuple[:-1]
             current_word = gram_tuple[-1]
 
-            #if prev_n_minus_one in self.conditionals:
-            try:
+            if prev_n_minus_one in self.conditionals:
+            #try:
                 denominator += math.log(self.conditionals[prev_n_minus_one].return_prob(current_word, self.vocab.keys(), self.freq_of_freqs, self.k_cutoff)**(-1./len(self.text)), 2)
 
-            except:
-                #so this is the probability of an unseen word
-                #divided by the number of unseen words
-                denominator += p_log_unseen
+            #except:
+            else:
+                #if we haven't seen the previous 2 words in order,
+                #then we just have interpolated counts of c_0 for all elements of that row
+                #so the probability is 1/V
+                denominator += math.log((self.unique_words)**(-1./len(self.text)), 2)
 
         return 2**denominator
 
