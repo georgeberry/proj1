@@ -103,11 +103,6 @@ class gram:
     ##class gram setup methods ##
 
     def __init__(self, input_tuple, word):
-        #if not isinstance(input_tuple, tuple):
-        #    if isinstance(input_tuple, str):
-        #        input_tuple = (input_tuple,)
-        #    else:
-        #        return 'intput not convertable to tuple'
 
         self.prev_words = input_tuple
 
@@ -145,42 +140,6 @@ class gram:
             self.next_words[word] += 1
         except:
             self.next_words[word] = 1
-
-
-    #def random_next(self):
-    #    '''
-    #    given a conditional probability word_dict, 
-    #    returns a random word
-    #    '''
-    #    if self.cum_sum == None:
-    #        self.cum_sum = sum(w for c, w in self.next_words.iteritems())
-
-    #    return self._weighted_next(self)
-
-
-    '''def _weighted_next(self, t = 'unsmoothed'):
-        
-        returns a smoothed or unsmoothed next sentence
-        class function, not for direct calling
-        
-
-        #if t == 'unsmoothed':
-        #    r = random.uniform(0, self.cum_sum)
-        #    left_point = 0
-        #    for c, w in self.next_words.iteritems():
-        #        if left_point + w >= r:
-        #            return c
-        #        left_point += w
-        #    assert False, "error"
-
-        if t == 'turing':
-            r = random.uniform(0, self.gt_seen_sum)
-            left_point = 0
-            for c, w in self.gt_next_counts.iteritems():
-                if left_point + w >= r:
-                    return c
-                left_point += w
-            assert False, "error"'''
 
 
     ## class gram output methods ##
@@ -228,20 +187,12 @@ class gram:
 
         self.gt_setup(vocab_list, freq_of_freq_dict, k_cutoff)
 
-        #count of current word over sum of all words in that row gives conditional prob
-
-        #print self.gt_next_counts
-        #print self.next_words
-
+        #count of current word
+        #divide by all words in the row
         if current_word in self.gt_next_counts:
-            #print current_word
-            #print self.gt_next_counts[current_word]
             return self.gt_next_counts[current_word]/self.gt_sum
         else:
-            #print current_word
             return self.c_0/self.gt_sum
-
-        #return self.gt_next_counts.get(current_word, self.c_0)/self.gt_sum
 
     ## class gram helper methods ##
 
@@ -259,7 +210,6 @@ class gram:
     def num_times_seen(self):
         '''
         returns a list of the number of times each n_gram is seen
-
         '''
         return self.next_words.values()
 
@@ -272,8 +222,6 @@ class gram:
         trying to follow DRY here
         '''
         if self.c_0 == None:
-            #print len(vocab_list)**(len(self.prev_words) + 1)
-            #print sum(freq_of_freq_dict.values())
 
             N_1_counts = freq_of_freq_dict[1]
 
@@ -282,15 +230,11 @@ class gram:
 
             self.c_0 = N_1_counts/N_0_counts
 
-            #print self.c_0
-
-            #print freq_of_freq_dict
-
             for k, v in self.next_words.iteritems():
                 self.gt_next_counts[k] = self.gt_counts(v, k_cutoff, freq_of_freq_dict)
 
-        #fancier way: need to check
-        #self.gt_next_counts = {k: self.gt_counts(v, k_cutoff, freq_of_freq_dict) for k, v in self.next_words.iteritems()}
+            #fancier way: need to check
+            #self.gt_next_counts = {k: self.gt_counts(v, k_cutoff, freq_of_freq_dict) for k, v in self.next_words.iteritems()}
 
             self.gt_seen_sum = sum(w for c, w in self.gt_next_counts.iteritems())
 
@@ -335,27 +279,11 @@ class ngrams:
         #initializes freq_of_freqs dict
         self.gt_setup()
 
-    #@timer
-    #def setup(self):
-    #    word_range = range(self.n)
-
-    #    for gram_tuple in window(self.text, self.n):
-    #        prev_n_minus_one = gram_tuple[:-1]
-    #        current_word = gram_tuple[-1]
-
-    #        try:
-    #increment class instance
-    #            self.conditionals[prev_n_minus_one].add_next(current_word)
-    #        except:
-    #initialize class instance
-    #            self.conditionals[prev_n_minus_one] = gram(prev_n_minus_one, current_word)
-
     @timer
     def gt_setup(self):
 
         #replaces first occurances with unknown words
         #skips the start/end sentence tokens
-
         self.text, self.vocab = self.handle_unknowns(self.text)
 
         self.unique_words = len(self.vocab.keys())
@@ -401,9 +329,6 @@ class ngrams:
 
         while sentence[-1] != '</s>':
             if self.n > 1:
-                #if tuple(current) not in self.conditionals.keys():
-                #    print 'not in'
-
                 try:
                     s = self.conditionals[tuple(current)].gt_random(self.vocab.keys(), self.freq_of_freqs, self.k_cutoff)
                 except:
@@ -459,8 +384,6 @@ class ngrams:
             if corpus_as_list[word] not in self.vocab:
                 corpus_as_list[word] = '<unk>'
 
-        #print self.conditionals
-
         denominator = 0.
 
         #probability of seeing any unseen word is U = N_1/N
@@ -468,15 +391,6 @@ class ngrams:
         #num_unseen is len(vocab)^n - num_seen
         seen_n_grams = sum(self.freq_of_freqs.values())
         theoretical_n_grams = self.unique_words**(self.n)
-
-        #does this need to be divided by all unseen ngrams?
-        #yes: 
-        #c_unseen_n_gram = ( self.freq_of_freqs[1]) / (theoretical_n_grams - seen_n_grams)
-
-
-
-        #log_p_unseen = math.log(c_unseen_n_gram**(-1./len(self.text)), 2)
-
 
         for gram_tuple in window(corpus_as_list, self.n):
 
@@ -522,9 +436,3 @@ if __name__ == "__main__":
 
     print tt.perplexity(p)
 
-
-    #for each in range(s):
-    #    print tt.gt_gen() + '\n' 
-
-    #print tt.conditionals[('the',)].next_words
-    #print tt.conditionals[('the',)].gt_next_counts
