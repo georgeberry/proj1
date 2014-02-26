@@ -138,7 +138,7 @@ class gram:
         
         try:
             self.next_words[word] += 1
-        except:
+        except KeyError:
             self.next_words[word] = 1
 
 
@@ -295,7 +295,7 @@ class ngrams:
             try:
                 #increment class instance
                 self.conditionals[prev_n_minus_one].add_next(current_word)
-            except:
+            except KeyError:
                 #initialize class instance
                 self.conditionals[prev_n_minus_one] = gram(prev_n_minus_one, current_word)
 
@@ -305,7 +305,7 @@ class ngrams:
             for count in v.num_times_seen():
                 try:
                     self.freq_of_freqs[count] += 1
-                except:
+                except KeyError:
                     self.freq_of_freqs[count] = 1
     
     @timer
@@ -329,9 +329,9 @@ class ngrams:
 
         while sentence[-1] != '</s>':
             if self.n > 1:
-                try:
+                if tuple(current) in self.conditionals:
                     s = self.conditionals[tuple(current)].gt_random(self.vocab.keys(), self.freq_of_freqs, self.k_cutoff)
-                except:
+                else:
                     s = random.choice(self.vocab)
 
                 sentence.append(s)
@@ -354,18 +354,17 @@ class ngrams:
         vocab = {}
 
         for word in xrange(len(text)):
-
             if text[word] not in seen_words:
                 seen_words[text[word]] = 1
                 text[word] = '<unk>'
                 try:
                     vocab[text[word]] += 1
-                except:
+                except KeyError:
                     vocab[text[word]] = 1
             else:
                 try:
                     vocab[text[word]] += 1
-                except:
+                except KeyError:
                     vocab[text[word]] = 1
 
         return text, vocab
@@ -384,13 +383,7 @@ class ngrams:
             if corpus_as_list[word] not in self.vocab:
                 corpus_as_list[word] = '<unk>'
 
-        denominator = 0.
-
-        #probability of seeing any unseen word is U = N_1/N
-        #probability of seeing a given word is U = num_unseen
-        #num_unseen is len(vocab)^n - num_seen
-        seen_n_grams = sum(self.freq_of_freqs.values())
-        theoretical_n_grams = self.unique_words**(self.n)
+        log_prob = 0.
 
         for gram_tuple in window(corpus_as_list, self.n):
 
@@ -400,17 +393,17 @@ class ngrams:
             current_word = gram_tuple[-1]
 
             if prev_n_minus_one in self.conditionals:
-            #try:
-                denominator += math.log(self.conditionals[prev_n_minus_one].return_prob(current_word, self.vocab.keys(), self.freq_of_freqs, self.k_cutoff)**(-1./len(self.text)), 2)
+                log_prob += math.log(self.conditionals[prev_n_minus_one].return_prob(current_word, self.vocab.keys(), self.freq_of_freqs, self.k_cutoff), 2)
 
-            #except:
             else:
                 #if we haven't seen the previous 2 words in order,
                 #then we just have interpolated counts of c_0 for all elements of that row
                 #so the probability is 1/V
-                denominator += math.log((self.unique_words)**(-1./len(self.text)), 2)
+                log_prob += math.log((1/self.unique_words), 2)
 
-        return 2**denominator
+        
+        log_perplexity = (-1./len(self.text))*log_prob
+        return 2**log_perplexity
 
 
 ##run program from command line ##
