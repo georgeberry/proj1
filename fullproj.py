@@ -56,7 +56,7 @@ def clean_up(text, n):
     #remove xml tags
     text = re.sub(r'<.*>','',text)
 
-    #replace verse numbers (beginning of sentence) with <s> tag
+    #remove verse numbers/hotel review numbers
     text = re.sub(r'[0-9]+[:,][0-9]+(,*)\s*','', text)
 
     #replace newlines with spaces (we do a space split below)
@@ -105,24 +105,18 @@ class gram:
     def __init__(self, input_tuple, word):
 
         self.prev_words = input_tuple
-
         #total number of observed subsequent words
         self.cum_sum = None
-
         #unsmoothed next words
         self.next_words = {word : 1}
 
         #good turing elements
-
         #smoothed counts of seen words
         self.gt_next_counts = {}
-
         #sum of smoothed seen words
         self.gt_seen_sum = None
-
         #sum of smoothed seen words plus U * P(U) (num unseen times prob unseen)
         self.gt_sum = None
-
         #the smoothed count of one unseen word
         self.c_0 = None
 
@@ -163,7 +157,7 @@ class gram:
         r = random.uniform(0, self.gt_sum)
 
         #pick unseen word with P(B) = C(unseen)/C(total)
-        if r < self.gt_seen_sum/self.gt_sum:
+        if r > self.gt_seen_sum/self.gt_sum:
             #all unseen words have same probability
             return random.choice(list(set(vocab_list) - set(self.gt_next_counts.keys())))
 
@@ -176,6 +170,23 @@ class gram:
                     return c
                 left_point += w
             assert False, "error"
+
+
+    #idea for implementation from here: http://stackoverflow.com/questions/3679694/a-weighted-version-of-random-choice
+    def random_next(self):
+        '''
+        given a conditional probability word_dict, 
+        returns a random word
+        '''
+        if not self.cum_sum:
+            self.cum_sum = sum(w for c, w in self.next_words.iteritems())
+        r = random.uniform(0, self.cum_sum)
+        left_point = 0
+        for c, w in self.next_words.iteritems():
+            if left_point + w >= r:
+                return c
+            left_point += w
+        assert False, "error"
 
 
     def return_prob(self, current_word, vocab_list, freq_of_freq_dict, k_cutoff):
@@ -228,7 +239,11 @@ class gram:
             #unique total ngrams - unique seen ngrams
             N_0_counts = (len(vocab_list)**(len(self.prev_words) + 1)) - sum(freq_of_freq_dict.values())
 
-            self.c_0 = N_1_counts/N_0_counts
+            if len(self.prev_words) > 0:
+                self.c_0 = N_1_counts/N_0_counts
+            else:
+                #for unigrams, there are no unseen words
+                self.c_0 = 0.
 
             for k, v in self.next_words.iteritems():
                 self.gt_next_counts[k] = self.gt_counts(v, k_cutoff, freq_of_freq_dict)
@@ -308,6 +323,43 @@ class ngrams:
                 except KeyError:
                     self.freq_of_freqs[count] = 1
     
+
+    @timer
+    def gen(self, smoothing = None):
+        if self.n > 1:
+            sentence = ['<s>']*(self.n-1)
+            #current keeps track of preceding n-1 words
+            current = sentence[-self.n+1:]
+        elif self.n == 1:
+            sentence = ['<s>']
+
+        while sentence[-1] != '</s>':
+            if self.n > 1:
+                if tuple(current) in self.conditionals:
+                    if smoothing == 'turing':
+                        s = self.conditionals[tuple(current)].gt_random(self.vocab.keys(), self.freq_of_freqs, self.k_cutoff)
+                    else:
+                        s = self.conditionals[tuple(current)].random_next()
+                else:
+                    if smoothing == 'turing':
+                        s = random.choice(self.vocab.keys())
+
+                sentence.append(s)
+
+                current = sentence[-self.n+1:]
+
+            elif self.n == 1:
+                if smoothing == 'turing':
+                    s = self.conditionals[()].gt_random(self.vocab.keys(), self.freq_of_freqs, self.k_cutoff) #for unigram
+                else:
+                    s = self.conditionals[()].random_next()
+                
+                sentence.append(s)
+
+        return ' '.join(sentence)
+
+
+
     @timer
     def gt_gen(self):
         ''' 
@@ -332,7 +384,7 @@ class ngrams:
                 if tuple(current) in self.conditionals:
                     s = self.conditionals[tuple(current)].gt_random(self.vocab.keys(), self.freq_of_freqs, self.k_cutoff)
                 else:
-                    s = random.choice(self.vocab)
+                    s = random.choice(self.vocab.keys())
 
                 sentence.append(s)
 
@@ -387,13 +439,17 @@ class ngrams:
 
         for gram_tuple in window(corpus_as_list, self.n):
 
-            #need to do something special for n = 1
+            if self.n == 1:
+                prev_n_minus_one = tuple()
+                current_word = gram_tuple[0]
 
-            prev_n_minus_one = gram_tuple[:-1]
-            current_word = gram_tuple[-1]
+            elif self.n > 1:
+                prev_n_minus_one = gram_tuple[:-1]
+                current_word = gram_tuple[-1]
 
             if prev_n_minus_one in self.conditionals:
-                log_prob += math.log(self.conditionals[prev_n_minus_one].return_prob(current_word, self.vocab.keys(), self.freq_of_freqs, self.k_cutoff), 2)
+                current_gram = self.conditionals[prev_n_minus_one]
+                log_prob += math.log(current_gram.return_prob(current_word, self.vocab.keys(), self.freq_of_freqs, self.k_cutoff), 2)
 
             else:
                 #if we haven't seen the previous 2 words in order,
@@ -426,6 +482,10 @@ if __name__ == "__main__":
     p = clean_up(p, n)
 
     tt = ngrams(n, t)
+
+    for each in xrange(s):
+        print tt.gen()
+        #print tt.gen(smoothing='turing')
 
     print tt.perplexity(p)
 
